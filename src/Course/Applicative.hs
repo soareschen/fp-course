@@ -43,14 +43,12 @@ instance Applicative ExactlyOne where
   pure ::
     a
     -> ExactlyOne a
-  pure =
-    error "todo: Course.Applicative pure#instance ExactlyOne"
-  (<*>) :: 
+  pure x = ExactlyOne x
+  (<*>) ::
     ExactlyOne (a -> b)
     -> ExactlyOne a
     -> ExactlyOne b
-  (<*>) =
-    error "todo: Course.Applicative (<*>)#instance ExactlyOne"
+  ExactlyOne f <*> ExactlyOne x = ExactlyOne (f x)
 
 -- | Insert into a List.
 --
@@ -62,14 +60,14 @@ instance Applicative List where
   pure ::
     a
     -> List a
-  pure =
-    error "todo: Course.Applicative pure#instance List"
+  pure x = x :. Nil
   (<*>) ::
     List (a -> b)
     -> List a
     -> List b
-  (<*>) =
-    error "todo: Course.Apply (<*>)#instance List"
+  Nil <*> _ = Nil
+  _ <*> Nil = Nil
+  (f :. fs) <*> xs = (f <$> xs) ++ (fs <*> xs)
 
 -- | Witness that all things with (<*>) and pure also have (<$>).
 --
@@ -105,14 +103,14 @@ instance Applicative Optional where
   pure ::
     a
     -> Optional a
-  pure =
-    error "todo: Course.Applicative pure#instance Optional"
+  pure x = Full x
   (<*>) ::
     Optional (a -> b)
     -> Optional a
     -> Optional b
-  (<*>) =
-    error "todo: Course.Apply (<*>)#instance Optional"
+  Empty <*> _ = Empty
+  _ <*> Empty = Empty
+  Full f <*> Full x = Full (f x)
 
 -- | Insert into a constant function.
 --
@@ -136,15 +134,13 @@ instance Applicative ((->) t) where
   pure ::
     a
     -> ((->) t a)
-  pure =
-    error "todo: Course.Applicative pure#((->) t)"
+  pure x = \_ -> x
   (<*>) ::
     ((->) t (a -> b))
     -> ((->) t a)
     -> ((->) t b)
-  (<*>) =
-    error "todo: Course.Apply (<*>)#instance ((->) t)"
-
+  f <*> g =
+    \x -> (f x) (g x)
 
 -- | Apply a binary function in the environment.
 --
@@ -171,8 +167,7 @@ lift2 ::
   -> f a
   -> f b
   -> f c
-lift2 =
-  error "todo: Course.Applicative#lift2"
+lift2 f x y = pure f <*> x <*> y
 
 -- | Apply a ternary function in the environment.
 --
@@ -203,8 +198,7 @@ lift3 ::
   -> f b
   -> f c
   -> f d
-lift3 =
-  error "todo: Course.Applicative#lift3"
+lift3 f x y z = pure f <*> x <*> y <*> z
 
 -- | Apply a quaternary function in the environment.
 --
@@ -236,8 +230,7 @@ lift4 ::
   -> f c
   -> f d
   -> f e
-lift4 =
-  error "todo: Course.Applicative#lift4"
+lift4 f w x y z = pure f <*> w <*> x <*> y <*> z
 
 -- | Apply, discarding the value of the first argument.
 -- Pronounced, right apply.
@@ -262,8 +255,7 @@ lift4 =
   f a
   -> f b
   -> f b
-(*>) =
-  error "todo: Course.Applicative#(*>)"
+xs *> ys = pure (\_ -> \y -> y) <*> xs <*> ys
 
 -- | Apply, discarding the value of the second argument.
 -- Pronounced, left apply.
@@ -283,13 +275,14 @@ lift4 =
 -- prop> (x :. y :. z :. Nil) <* (a :. b :. c :. Nil) == (x :. x :. x :. y :. y :. y :. z :. z :. z :. Nil)
 --
 -- prop> Full x <* Full y == Full x
+-- <*> :: f (a -> b) -> f a -> f b
+-- <*> :: f (a -> b -> a) -> f a -> f (b-> a)
 (<*) ::
   Applicative f =>
   f b
   -> f a
   -> f b
-(<*) =
-  error "todo: Course.Applicative#(<*)"
+xs <* ys = pure (\x -> \_ -> x) <*> xs <*> ys
 
 -- | Sequences a list of structures to a structure of list.
 --
@@ -311,8 +304,9 @@ sequence ::
   Applicative f =>
   List (f a)
   -> f (List a)
-sequence =
-  error "todo: Course.Applicative#sequence"
+sequence Nil = pure Nil
+sequence (fx :. fxs) =
+  pure (:.) <*> fx <*> (sequence fxs)
 
 -- | Replicate an effect a given number of times.
 --
@@ -335,8 +329,7 @@ replicateA ::
   Int
   -> f a
   -> f (List a)
-replicateA =
-  error "todo: Course.Applicative#replicateA"
+replicateA n fx = sequence (replicate n fx)
 
 -- | Filter a list with a predicate that produces an effect.
 --
@@ -359,12 +352,23 @@ replicateA =
 -- [[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3],[1,2,3]]
 --
 filtering ::
+  forall f a.
   Applicative f =>
   (a -> f Bool)
   -> List a
   -> f (List a)
-filtering =
-  error "todo: Course.Applicative#filtering"
+filtering p xs =
+  let
+    ys :: List (f (List a))
+    ys = helper1 <$> xs
+
+    zs :: f (List (List a))
+    zs = sequence ys
+  in
+    pure flatten <*> zs
+  where
+    helper1 :: a -> f (List a)
+    helper1 x = pure (\b -> if b then (x :. Nil) else Nil) <*> (p x)
 
 -----------------------
 -- SUPPORT LIBRARIES --

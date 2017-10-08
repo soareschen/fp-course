@@ -75,8 +75,8 @@ headOr ::
   a
   -> List a
   -> a
-headOr =
-  error "todo: Course.List#headOr"
+headOr x Nil = x
+headOr _ (x :. _) = x
 
 -- | The product of the elements of a list.
 --
@@ -91,8 +91,8 @@ headOr =
 product ::
   List Int
   -> Int
-product =
-  error "todo: Course.List#product"
+product Nil = 1
+product (x :. xs) = x * product xs
 
 -- | Sum the elements of the list.
 --
@@ -106,8 +106,8 @@ product =
 sum ::
   List Int
   -> Int
-sum =
-  error "todo: Course.List#sum"
+sum Nil = 0
+sum (x :. xs) = x + sum xs
 
 -- | Return the length of the list.
 --
@@ -118,8 +118,8 @@ sum =
 length ::
   List a
   -> Int
-length =
-  error "todo: Course.List#length"
+length Nil = 0
+length (_ :. xs) = 1 + length xs
 
 -- | Map the given function on each element of the list.
 --
@@ -133,8 +133,8 @@ map ::
   (a -> b)
   -> List a
   -> List b
-map =
-  error "todo: Course.List#map"
+map _ Nil = Nil
+map f (x :. xs) = f x :. map f xs
 
 -- | Return elements satisfying the given predicate.
 --
@@ -150,8 +150,9 @@ filter ::
   (a -> Bool)
   -> List a
   -> List a
-filter =
-  error "todo: Course.List#filter"
+filter _ Nil = Nil
+filter p (x :. xs) = let xs' = filter p xs in
+  if p x then x :. xs' else xs'
 
 -- | Append two lists to a new list.
 --
@@ -169,8 +170,8 @@ filter =
   List a
   -> List a
   -> List a
-(++) =
-  error "todo: Course.List#(++)"
+Nil ++ ys = ys
+(x :. xs) ++ ys = x :. (xs ++ ys)
 
 infixr 5 ++
 
@@ -187,8 +188,12 @@ infixr 5 ++
 flatten ::
   List (List a)
   -> List a
-flatten =
-  error "todo: Course.List#flatten"
+flatten Nil = Nil
+flatten (xs :. xss) = flatten' xs xss
+        where
+          flatten' :: List a -> List (List a) -> List a
+          flatten' Nil yss = flatten yss
+          flatten' (y :. ys) yss = y :. flatten' ys yss
 
 -- | Map a function then flatten to a list.
 --
@@ -204,8 +209,13 @@ flatMap ::
   (a -> List b)
   -> List a
   -> List b
-flatMap =
-  error "todo: Course.List#flatMap"
+flatMap _ Nil = Nil
+flatMap f (x :. xs) =
+  let
+        ys = f x
+        yss = flatMap f xs
+  in
+    ys ++ yss
 
 -- | Flatten a list of lists to a list (again).
 -- HOWEVER, this time use the /flatMap/ function that you just wrote.
@@ -214,12 +224,12 @@ flatMap =
 flattenAgain ::
   List (List a)
   -> List a
-flattenAgain =
-  error "todo: Course.List#flattenAgain"
+flattenAgain xss =
+  flatMap (\xs -> xs) xss
 
 -- | Convert a list of optional values to an optional list of values.
 --
--- * If the list contains all `Full` values, 
+-- * If the list contains all `Full` values,
 -- then return `Full` list of values.
 --
 -- * If the list contains one or more `Empty` values,
@@ -242,8 +252,12 @@ flattenAgain =
 seqOptional ::
   List (Optional a)
   -> Optional (List a)
-seqOptional =
-  error "todo: Course.List#seqOptional"
+seqOptional Nil = Full Nil
+seqOptional (Empty :. _) = Empty
+seqOptional (Full x :. xs) =
+  case (seqOptional xs) of
+    Full ys -> Full (x :. ys)
+    Empty -> Empty
 
 -- | Find the first element in the list matching the predicate.
 --
@@ -265,8 +279,9 @@ find ::
   (a -> Bool)
   -> List a
   -> Optional a
-find =
-  error "todo: Course.List#find"
+find _ Nil = Empty
+find p (x :. xs) =
+  if p x then Full x else find p xs
 
 -- | Determine if the length of the given list is greater than 4.
 --
@@ -284,8 +299,11 @@ find =
 lengthGT4 ::
   List a
   -> Bool
-lengthGT4 =
-  error "todo: Course.List#lengthGT4"
+lengthGT4 xs = lengthGT 4 xs
+        where
+          lengthGT _ Nil = False
+          lengthGT 0 _ = True
+          lengthGT l (_ :. ys) = lengthGT (l-1) ys
 
 -- | Reverse a list.
 --
@@ -301,8 +319,12 @@ lengthGT4 =
 reverse ::
   List a
   -> List a
-reverse =
-  error "todo: Course.List#reverse"
+reverse Nil = Nil
+reverse (x :. xs) = reverse' (x :. Nil) xs
+        where
+          reverse' :: List a -> List a -> List a
+          reverse' acc Nil = acc
+          reverse' acc (y :. ys) = reverse' (y :. acc) ys
 
 -- | Produce an infinite `List` that seeds with the given value at its head,
 -- then runs the given function for subsequent elements
@@ -330,8 +352,7 @@ produce f x = x :. produce f (f x)
 notReverse ::
   List a
   -> List a
-notReverse =
-  error "todo: Is it even possible?"
+notReverse xs = xs
 
 ---- End of list exercises
 
