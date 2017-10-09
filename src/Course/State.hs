@@ -31,6 +31,11 @@ newtype State s a =
       -> (a, s)
   }
 
+makeState :: (s -> (a, s)) -> State s a
+makeState runner = State {
+  runState = runner
+  }
+
 -- | Run the `State` seeded with `s` and retrieve the resulting state.
 --
 -- prop> \(Fun _ f) -> exec (State f) s == snd (runState (State f) s)
@@ -38,8 +43,7 @@ exec ::
   State s a
   -> s
   -> s
-exec =
-  error "todo: Course.State#exec"
+exec sc sv = let (_, sv') = runState sc sv in sv'
 
 -- | Run the `State` seeded with `s` and retrieve the resulting value.
 --
@@ -48,8 +52,7 @@ eval ::
   State s a
   -> s
   -> a
-eval =
-  error "todo: Course.State#eval"
+eval sc sv = let (x, _) = runState sc sv in x
 
 -- | A `State` where the state also distributes into the produced value.
 --
@@ -57,8 +60,7 @@ eval =
 -- (0,0)
 get ::
   State s s
-get =
-  error "todo: Course.State#get"
+get = makeState (\sv -> (sv, sv))
 
 -- | A `State` where the resulting state is seeded with the given value.
 --
@@ -67,8 +69,7 @@ get =
 put ::
   s
   -> State s ()
-put =
-  error "todo: Course.State#put"
+put sv = makeState (\_ -> ((), sv))
 
 -- | Implement the `Functor` instance for `State s`.
 --
@@ -79,8 +80,9 @@ instance Functor (State s) where
     (a -> b)
     -> State s a
     -> State s b
-  (<$>) =
-    error "todo: Course.State#(<$>)"
+  f <$> scx = makeState (\sv ->
+        let (x, sv') = runState scx sv in
+          ((f x), sv'))
 
 -- | Implement the `Applicative` instance for `State s`.
 --
@@ -97,14 +99,20 @@ instance Applicative (State s) where
   pure ::
     a
     -> State s a
-  pure =
-    error "todo: Course.State pure#instance (State s)"
+  pure x = State {
+    runState = \sv -> (x, sv)
+    }
+
   (<*>) ::
     State s (a -> b)
     -> State s a
-    -> State s b 
-  (<*>) =
-    error "todo: Course.State (<*>)#instance (State s)"
+    -> State s b
+  sf <*> sx = makeState (\sv ->
+        let
+          (f, sv') = runState sf sv
+          (x, sv'') = runState sx sv'
+        in
+          (f x, sv''))
 
 -- | Implement the `Bind` instance for `State s`.
 --
@@ -118,8 +126,12 @@ instance Monad (State s) where
     (a -> State s b)
     -> State s a
     -> State s b
-  (=<<) =
-    error "todo: Course.State (=<<)#instance (State s)"
+  f =<< sx = makeState (\sv ->
+        let
+          (x, sv') = runState sx sv
+          sy = f x
+        in
+          runState sy sv')
 
 -- | Find the first element in a `List` that satisfies a given predicate.
 -- It is possible that no element is found, hence an `Optional` result.
@@ -140,8 +152,9 @@ findM ::
   (a -> f Bool)
   -> List a
   -> f (Optional a)
-findM =
-  error "todo: Course.State#findM"
+findM _ Nil = pure Empty
+findM p (x :. xs) = p x >>= \b ->
+  if b then pure (Full x) else findM p xs
 
 -- | Find the first element in a `List` that repeats.
 -- It is possible that no element repeats, hence an `Optional` result.
@@ -151,11 +164,29 @@ findM =
 -- prop> case firstRepeat xs of Empty -> let xs' = hlist xs in nub xs' == xs'; Full x -> length (filter (== x) xs) > 1
 -- prop> case firstRepeat xs of Empty -> True; Full x -> let (l, (rx :. rs)) = span (/= x) xs in let (l2, r2) = span (/= x) rs in let l3 = hlist (l ++ (rx :. Nil) ++ l2) in nub l3 == l3
 firstRepeat ::
+  forall a.
   Ord a =>
   List a
   -> Optional a
-firstRepeat =
-  error "todo: Course.State#firstRepeat"
+firstRepeat Nil = Empty
+firstRepeat xs =
+  let
+    st = findM findInState xs
+    (res, _) = runState st S.empty
+  in
+    res
+  where
+    findInSet :: a -> S.Set a -> (Bool, S.Set a)
+    findInSet x found =
+      if S.member x found then
+        (True, found)
+        else
+        (False, S.insert x found)
+
+    findInState :: a -> State (S.Set a) Bool
+    findInState x = State {
+      runState = \sv -> findInSet x sv
+      }
 
 -- | Remove all duplicate elements in a `List`.
 -- /Tip:/ Use `filtering` and `State` with a @Data.Set#Set@.

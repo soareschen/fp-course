@@ -63,8 +63,7 @@ infixr 1 =<<
   f (a -> b)
   -> f a
   -> f b
-(<**>) =
-  error "todo: Course.Monad#(<**>)"
+ff <**> fx = ff <*> fx
 
 infixl 4 <**>
 
@@ -77,8 +76,7 @@ instance Monad ExactlyOne where
     (a -> ExactlyOne b)
     -> ExactlyOne a
     -> ExactlyOne b
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance ExactlyOne"
+  f =<< ExactlyOne x = f x
 
 -- | Binds a function on a List.
 --
@@ -89,8 +87,8 @@ instance Monad List where
     (a -> List b)
     -> List a
     -> List b
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance List"
+  _ =<< Nil = Nil
+  f =<< (x :. xs) = (f x) ++ (f =<< xs)
 
 -- | Binds a function on an Optional.
 --
@@ -101,8 +99,8 @@ instance Monad Optional where
     (a -> Optional b)
     -> Optional a
     -> Optional b
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance Optional"
+  _ =<< Empty = Empty
+  f =<< Full x = f x
 
 -- | Binds a function on the reader ((->) t).
 --
@@ -110,11 +108,11 @@ instance Monad Optional where
 -- 119
 instance Monad ((->) t) where
   (=<<) ::
+    forall a b.
     (a -> ((->) t b))
     -> ((->) t a)
     -> ((->) t b)
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance ((->) t)"
+  f =<< g = \x -> (f (g x)) x
 
 -- | Flattens a combined structure to a single structure.
 --
@@ -133,8 +131,7 @@ join ::
   Monad f =>
   f (f a)
   -> f a
-join =
-  error "todo: Course.Monad#join"
+join mma = (\ma -> ma) =<< mma
 
 -- | Implement a flipped version of @(=<<)@, however, use only
 -- @join@ and @(<$>)@.
@@ -147,8 +144,7 @@ join =
   f a
   -> (a -> f b)
   -> f b
-(>>=) =
-  error "todo: Course.Monad#(>>=)"
+ma >>= f = f =<< ma
 
 infixl 1 >>=
 
@@ -163,8 +159,7 @@ infixl 1 >>=
   -> (a -> f b)
   -> a
   -> f c
-(<=<) =
-  error "todo: Course.Monad#(<=<)"
+g <=< f = \x -> (f x) >>= (\y -> g y)
 
 infixr 1 <=<
 
