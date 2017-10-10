@@ -156,6 +156,16 @@ findM _ Nil = pure Empty
 findM p (x :. xs) = p x >>= \b ->
   if b then pure (Full x) else findM p xs
 
+memberM :: Ord a => a -> S.Set a -> (Bool, S.Set a)
+memberM x found =
+  if S.member x found then
+    (True, found)
+  else
+    (False, S.insert x found)
+
+memberS :: Ord a => a -> State (S.Set a) Bool
+memberS x = makeState (memberM x)
+
 -- | Find the first element in a `List` that repeats.
 -- It is possible that no element repeats, hence an `Optional` result.
 --
@@ -170,23 +180,21 @@ firstRepeat ::
   -> Optional a
 firstRepeat Nil = Empty
 firstRepeat xs =
-  let
-    st = findM findInState xs
-    (res, _) = runState st S.empty
-  in
-    res
-  where
-    findInSet :: a -> S.Set a -> (Bool, S.Set a)
-    findInSet x found =
-      if S.member x found then
-        (True, found)
-        else
-        (False, S.insert x found)
+  eval (findM memberS xs) S.empty
 
-    findInState :: a -> State (S.Set a) Bool
-    findInState x = State {
-      runState = \sv -> findInSet x sv
-      }
+filterM ::
+  Monad m =>
+  (a -> m Bool)
+  -> List a
+  -> m (List a)
+filterM _ Nil = pure Nil
+filterM p (x :. xs) = p x >>= \b ->
+  let mys = filterM p xs in
+    if b
+    then
+      mys
+    else
+      mys >>= \ys -> pure (x :. ys)
 
 -- | Remove all duplicate elements in a `List`.
 -- /Tip:/ Use `filtering` and `State` with a @Data.Set#Set@.
@@ -195,11 +203,11 @@ firstRepeat xs =
 --
 -- prop> distinct xs == distinct (flatMap (\x -> x :. x :. Nil) xs)
 distinct ::
+  forall a.
   Ord a =>
   List a
   -> List a
-distinct =
-  error "todo: Course.State#distinct"
+distinct xs = eval (filterM memberS xs) S.empty
 
 -- | A happy number is a positive integer, where the sum of the square of its digits eventually reaches 1 after repetition.
 -- In contrast, a sad number (not a happy number) is where the sum of the square of its digits never reaches 1
