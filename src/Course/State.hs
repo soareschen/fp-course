@@ -13,6 +13,7 @@ import Course.Functor
 import Course.Applicative
 import Course.Monad
 import qualified Data.Set as S
+import qualified Data.Char as C
 
 -- $setup
 -- >>> import Test.QuickCheck.Function
@@ -233,5 +234,39 @@ distinct xs = eval (filterM memberS xs) S.empty
 isHappy ::
   Integer
   -> Bool
-isHappy =
-  error "todo: Course.State#isHappy"
+isHappy n =
+  let
+    xs = happySeries n
+    res = find (\x -> x == 1) xs
+  in
+    case res of
+      Full 1 -> True
+      _ -> False
+
+  where
+    happySeries :: Integer -> List Integer
+    happySeries x = sumOfSquares x S.empty
+
+    digits :: Integer -> List Integer
+    digits y = digits' y  Nil where
+      digits' x acc =
+        if x < 10 then x :. acc else
+          let (q, r) = quotRem x 10 in
+            digits' q (r :. acc)
+
+    sumInt ::
+      List Integer
+      -> Integer
+    sumInt Nil = 0
+    sumInt (x :. xs) = x + sumInt xs
+
+    sumOfSquare :: Integer -> Integer
+    sumOfSquare x = sumInt ((\d -> d * d) <$> digits x)
+
+    sumOfSquares :: Integer -> S.Set Integer -> List Integer
+    sumOfSquares x found = if S.member x found then Nil else
+      let
+        y = sumOfSquare x
+        found' = S.insert x found
+      in
+        x :. sumOfSquares y found'
