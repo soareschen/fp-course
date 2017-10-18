@@ -236,17 +236,12 @@ isHappy ::
   -> Bool
 isHappy n =
   let
-    xs = happySeries n
-    res = find (\x -> x == 1) xs
+    xs = produce sumOfSquare n
+    res = firstRepeat xs
   in
-    case res of
-      Full 1 -> True
-      _ -> False
+    contains 1 res
 
   where
-    happySeries :: Integer -> List Integer
-    happySeries x = sumOfSquares x S.empty
-
     digits :: Integer -> List Integer
     digits y = digits' y  Nil where
       digits' x acc =
@@ -254,19 +249,8 @@ isHappy n =
           let (q, r) = quotRem x 10 in
             digits' q (r :. acc)
 
-    sumInt ::
-      List Integer
-      -> Integer
-    sumInt Nil = 0
-    sumInt (x :. xs) = x + sumInt xs
+    sumInt :: List Integer -> Integer
+    sumInt = foldLeft (+) 0
 
     sumOfSquare :: Integer -> Integer
     sumOfSquare x = sumInt ((\d -> d * d) <$> digits x)
-
-    sumOfSquares :: Integer -> S.Set Integer -> List Integer
-    sumOfSquares x found = if S.member x found then Nil else
-      let
-        y = sumOfSquare x
-        found' = S.insert x found
-      in
-        x :. sumOfSquares y found'
