@@ -36,11 +36,13 @@ newtype StateT s f a =
 -- [(3,0)]
 instance Functor f => Functor (StateT s f) where
   (<$>) ::
+    forall a b.
     (a -> b)
     -> StateT s f a
     -> StateT s f b
-  (<$>) =
-    error "todo: Course.StateT (<$>)#instance (StateT s f)"
+  fn <$> StateT sfa = StateT res where
+    res :: s -> f (b, s)
+    res s = (\(a, s') -> (fn a, s')) <$> (sfa s)
 
 -- | Implement the `Applicative` instance for @StateT s f@ given a @Monad f@.
 --
@@ -61,16 +63,23 @@ instance Functor f => Functor (StateT s f) where
 -- [(4,[0,1,2]),(5,[0,1,2])]
 instance Monad f => Applicative (StateT s f) where
   pure ::
-    a
-    -> StateT s f a
-  pure =
-    error "todo: Course.StateT pure#instance (StateT s f)"
+    forall a.
+    a -> StateT s f a
+  pure x = StateT (\s -> pure (x, s))
   (<*>) ::
-   StateT s f (a -> b)
+    forall a b.
+    StateT s f (a -> b)
     -> StateT s f a
     -> StateT s f b
-  (<*>) =
-    error "todo: Course.StateT (<*>)#instance (StateT s f)"
+  StateT sfn <*> StateT sfa = StateT res where
+    mapFas :: (a -> b) -> f (a, s) -> f (b, s)
+    mapFas fn fas = (\(x, s) -> (fn x, s)) <$> fas
+
+    mapAbs :: ((a -> b), s) -> f (b, s)
+    mapAbs (fn, s) = mapFas fn (sfa s)
+
+    res :: s -> f (b, s)
+    res s = (sfn s) >>= mapAbs
 
 -- | Implement the `Monad` instance for @StateT s f@ given a @Monad f@.
 -- Make sure the state value is passed through in `bind`.
