@@ -91,11 +91,22 @@ instance Monad f => Applicative (StateT s f) where
 -- ((),16)
 instance Monad f => Monad (StateT s f) where
   (=<<) ::
+    forall a b.
     (a -> StateT s f b)
     -> StateT s f a
     -> StateT s f b
-  (=<<) =
-    error "todo: Course.StateT (=<<)#instance (StateT s f)"
+  fn =<< StateT sfa = StateT res where
+    res :: s -> f (b, s)
+    res s = helper1 (sfa s)
+
+    helper1 :: f (a, s) -> f (b, s)
+    helper1 fas = helper2 =<< fas
+
+    helper2 :: (a, s) -> f (b, s)
+    helper2 (x, s) = helper3 s (fn x)
+
+    helper3 :: s -> StateT s f b -> f (b, s)
+    helper3 s (StateT sfb) = sfb s
 
 -- | A `State'` is `StateT` specialised to the `ExactlyOne` functor.
 type State' s a =
@@ -106,10 +117,12 @@ type State' s a =
 -- >>> runStateT (state' $ runState $ put 1) 0
 -- ExactlyOne  ((),1)
 state' ::
+  forall a s.
   (s -> (a, s))
   -> State' s a
-state' =
-  error "todo: Course.StateT#state'"
+state' fn = StateT helper where
+  helper :: s -> ExactlyOne (a, s)
+  helper s = ExactlyOne (fn s)
 
 -- | Provide an unwrapper for `State'` values.
 --
@@ -119,42 +132,43 @@ runState' ::
   State' s a
   -> s
   -> (a, s)
-runState' =
-  error "todo: Course.StateT#runState'"
+runState' (StateT fs) s = runExactlyOne (fs s)
 
 -- | Run the `StateT` seeded with `s` and retrieve the resulting state.
 execT ::
+  forall s f a.
   Functor f =>
   StateT s f a
   -> s
   -> f s
-execT =
-  error "todo: Course.StateT#execT"
+execT (StateT sfa) s = helper (sfa s) where
+  helper :: f (a, s) -> f s
+  helper fas = snd <$> fas
 
 -- | Run the `State` seeded with `s` and retrieve the resulting state.
 exec' ::
   State' s a
   -> s
   -> s
-exec' =
-  error "todo: Course.StateT#exec'"
+exec' st s = runExactlyOne (execT st s)
 
 -- | Run the `StateT` seeded with `s` and retrieve the resulting value.
 evalT ::
+  forall s f a.
   Functor f =>
   StateT s f a
   -> s
   -> f a
-evalT =
-  error "todo: Course.StateT#evalT"
+evalT (StateT sfa) s = helper (sfa s) where
+  helper :: f (a, s) -> f a
+  helper fas = fst <$> fas
 
 -- | Run the `State` seeded with `s` and retrieve the resulting value.
 eval' ::
   State' s a
   -> s
   -> a
-eval' =
-  error "todo: Course.StateT#eval'"
+eval' st s = runExactlyOne (evalT st s)
 
 -- | A `StateT` where the state also distributes into the produced value.
 --
