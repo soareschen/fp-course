@@ -175,10 +175,12 @@ eval' st s = runExactlyOne (evalT st s)
 -- >>> (runStateT (getT :: StateT Int List Int) 3)
 -- [(3,3)]
 getT ::
+  forall s f.
   Applicative f =>
   StateT s f s
-getT =
-  error "todo: Course.StateT#getT"
+getT = StateT helper where
+  helper :: s -> f (s, s)
+  helper s = pure (s, s)
 
 -- | A `StateT` where the resulting state is seeded with the given value.
 --
@@ -188,11 +190,13 @@ getT =
 -- >>> runStateT (putT 2 :: StateT Int List ()) 0
 -- [((),2)]
 putT ::
+  forall s f.
   Applicative f =>
   s
   -> StateT s f ()
-putT =
-  error "todo: Course.StateT#putT"
+putT s = StateT helper where
+  helper :: s -> f ((), s)
+  helper _ = pure ((), s)
 
 -- | Remove all duplicate elements in a `List`.
 --
@@ -200,11 +204,21 @@ putT =
 --
 -- prop> distinct' xs == distinct' (flatMap (\x -> x :. x :. Nil) xs)
 distinct' ::
+  forall a.
   (Ord a, Num a) =>
   List a
   -> List a
-distinct' =
-  error "todo: Course.StateT#distinct'"
+distinct' xs = eval' (helper1 xs) S.empty where
+  helper1 :: List a -> State' (S.Set a) (List a)
+  helper1 = filtering helper2
+
+  helper2 :: a -> State' (S.Set a) Bool
+  helper2 x = state' (helper3 x)
+
+  helper3 :: a -> S.Set a -> (Bool, S.Set a)
+  helper3 x s = if S.member x s
+    then (False, s)
+    else (True, S.insert x s)
 
 -- | Remove all duplicate elements in a `List`.
 -- However, if you see a value greater than `100` in the list,
@@ -218,11 +232,29 @@ distinct' =
 -- >>> distinctF $ listh [1,2,3,2,1,101]
 -- Empty
 distinctF ::
+  forall a.
   (Ord a, Num a) =>
   List a
   -> Optional (List a)
-distinctF =
-  error "todo: Course.StateT#distinctF"
+distinctF = distinctF' lte100 where
+  lte100 :: a -> Bool
+  lte100 x = x <= 100
+
+  distinctF' :: (a -> Bool) -> List a -> Optional (List a)
+  distinctF' validator xs = evalT (helper1 xs) S.empty where
+    helper1 :: List a -> StateT (S.Set a) Optional (List a)
+    helper1 = filtering helper2
+
+    helper2 :: a -> StateT (S.Set a) Optional Bool
+    helper2 x = StateT (helper3 x)
+
+    helper3 :: a -> S.Set a -> Optional (Bool, S.Set a)
+    helper3 x s = if not (validator x) then Empty else
+      if S.member x s
+      then Full (False, s)
+      else Full (True, S.insert x s)
+
+
 
 -- | An `OptionalT` is a functor of an `Optional` value.
 data OptionalT f a =
@@ -236,26 +268,44 @@ data OptionalT f a =
 -- >>> runOptionalT $ (+1) <$> OptionalT (Full 1 :. Empty :. Nil)
 -- [Full 2,Empty]
 instance Functor f => Functor (OptionalT f) where
-  (<$>) =
-    error "todo: Course.StateT (<$>)#instance (OptionalT f)"
+  (<$>) ::
+    forall a b.
+    (a -> b) ->
+    OptionalT f a ->
+    OptionalT f b
+  f <$> (OptionalT foa) = OptionalT (helper <$> foa) where
+    helper :: Optional a -> Optional b
+    helper = ((<$>) f)
 
 -- | Implement the `Applicative` instance for `OptionalT f` given a Applicative f.
 --
 -- >>> runOptionalT $ OptionalT (Full (+1) :. Full (+2) :. Nil) <*> OptionalT (Full 1 :. Empty :. Nil)
 -- [Full 2,Empty,Full 3,Empty]
 instance Applicative f => Applicative (OptionalT f) where
-  pure =
-    error "todo: Course.StateT pure#instance (OptionalT f)"
-  (<*>) =
-    error "todo: Course.StateT (<*>)#instance (OptionalT f)"
+  pure :: a -> OptionalT f a
+  pure x = OptionalT (pure (pure x))
+
+  (<*>) :: forall a b. OptionalT f (a -> b) -> OptionalT f a -> OptionalT f b
+  (OptionalT f) <*> (OptionalT x) = OptionalT (helper1 f x) where
+    helper1 :: f (Optional (a -> b)) -> f (Optional a) -> f (Optional b)
+    helper1 f' x' = pure helper2 <*> f' <*> x' where
+
+    helper2 :: Optional (a -> b) -> Optional a -> Optional b
+    helper2 = (<*>)
 
 -- | Implement the `Monad` instance for `OptionalT f` given a Monad f.
 --
 -- >>> runOptionalT $ (\a -> OptionalT (Full (a+1) :. Full (a+2) :. Nil)) =<< OptionalT (Full 1 :. Empty :. Nil)
 -- [Full 2,Full 3,Empty]
 instance Monad f => Monad (OptionalT f) where
-  (=<<) =
-    error "todo: Course.StateT (=<<)#instance (OptionalT f)"
+  (=<<) :: forall a b. (a -> OptionalT f b) -> OptionalT f a -> OptionalT f b
+  f =<< OptionalT foa = OptionalT (helper1 foa) where
+    helper1 :: f (Optional a) -> f (Optional b)
+    helper1 x = helper2 =<< x
+
+    helper2 :: Optional a -> f (Optional b)
+    helper2 Empty = pure Empty
+    helper2 (Full x') = runOptionalT (f x')
 
 -- | A `Logger` is a pair of a list of log values (`[l]`) and an arbitrary value (`a`).
 data Logger l a =
@@ -267,8 +317,8 @@ data Logger l a =
 -- >>> (+3) <$> Logger (listh [1,2]) 3
 -- Logger [1,2] 6
 instance Functor (Logger l) where
-  (<$>) =
-    error "todo: Course.StateT (<$>)#instance (Logger l)"
+  (<$>) :: (a -> b) -> Logger l a -> (Logger l b)
+  f <$> (Logger xs x) = Logger xs (f x)
 
 -- | Implement the `Applicative` instance for `Logger`.
 --
@@ -278,10 +328,11 @@ instance Functor (Logger l) where
 -- >>> Logger (listh [1,2]) (+7) <*> Logger (listh [3,4]) 3
 -- Logger [1,2,3,4] 10
 instance Applicative (Logger l) where
-  pure =
-    error "todo: Course.StateT pure#instance (Logger l)"
-  (<*>) =
-    error "todo: Course.StateT (<*>)#instance (Logger l)"
+  pure :: a -> Logger l a
+  pure x = Logger Nil x
+
+  (<*>) :: Logger l (a -> b) -> Logger l a -> Logger l b
+  (Logger fs f) <*> (Logger xs x) = Logger (fs ++ xs) (f x)
 
 -- | Implement the `Monad` instance for `Logger`.
 -- The `bind` implementation must append log values to maintain associativity.
@@ -289,8 +340,9 @@ instance Applicative (Logger l) where
 -- >>> (\a -> Logger (listh [4,5]) (a+3)) =<< Logger (listh [1,2]) 3
 -- Logger [1,2,4,5] 6
 instance Monad (Logger l) where
-  (=<<) =
-    error "todo: Course.StateT (=<<)#instance (Logger l)"
+  (=<<) :: forall a b. (a -> Logger l b) -> Logger l a -> Logger l b
+  f =<< (Logger xs x) = let Logger ys y = f x in
+    Logger (xs ++ ys) y
 
 -- | A utility function for producing a `Logger` with one log value.
 --
@@ -300,8 +352,7 @@ log1 ::
   l
   -> a
   -> Logger l a
-log1 =
-  error "todo: Course.StateT#log1"
+log1 xs x = Logger (xs :. Nil) x
 
 -- | Remove all duplicate integers from a list. Produce a log as you go.
 -- If there is an element above 100, then abort the entire computation and produce no result.
@@ -318,8 +369,33 @@ log1 =
 -- >>> distinctG $ listh [1,2,3,2,6,106]
 -- Logger ["even number: 2","even number: 2","even number: 6","aborting > 100: 106"] Empty
 distinctG ::
+  forall a.
   (Integral a, Show a) =>
   List a
   -> Logger Chars (Optional (List a))
-distinctG =
-  error "todo: Course.StateT#distinctG"
+distinctG xs = runOptionalT helper1 where
+  helper1 :: OptionalT (Logger Chars) (List a)
+  helper1 = evalT helper2 S.empty
+
+  helper2 :: StateT (S.Set a) (OptionalT (Logger Chars)) (List a)
+  helper2 = filtering helper3 xs
+
+  helper3 :: a -> StateT (S.Set a) (OptionalT (Logger Chars)) Bool
+  helper3 x = StateT helper4 where
+    helper4 :: S.Set a -> OptionalT (Logger Chars) (Bool, S.Set a)
+    helper4 s = if x > 100
+      then OptionalT helper5
+      else OptionalT helper6
+      where
+        helper5 :: Logger Chars (Optional (Bool, S.Set a))
+        helper5 = log1 ("aborting > 100: " ++ (show' x)) Empty
+
+        helper6 :: Logger Chars (Optional (Bool, S.Set a))
+        helper6 = if even x
+          then log1 ("even number: " ++ (show' x)) (Full helper7)
+          else Logger Nil (Full helper7)
+
+        helper7 :: (Bool, S.Set a)
+        helper7 = if S.member x s
+          then (False, s)
+          else (True, S.insert x s)
