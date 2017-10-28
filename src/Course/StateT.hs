@@ -40,9 +40,12 @@ instance Functor f => Functor (StateT s f) where
     (a -> b)
     -> StateT s f a
     -> StateT s f b
-  fn <$> StateT sfa = StateT res where
-    res :: s -> f (b, s)
-    res s = (\(a, s') -> (fn a, s')) <$> (sfa s)
+  fn <$> StateT x = StateT helper1 where
+    helper1 :: s -> f (b, s)
+    helper1 s = helper2 <$> (x s)
+
+    helper2 :: (a, s) -> (b, s)
+    helper2 (y, s) = (fn y, s)
 
 -- | Implement the `Applicative` instance for @StateT s f@ given a @Monad f@.
 --
@@ -66,20 +69,23 @@ instance Monad f => Applicative (StateT s f) where
     forall a.
     a -> StateT s f a
   pure x = StateT (\s -> pure (x, s))
+
   (<*>) ::
     forall a b.
     StateT s f (a -> b)
     -> StateT s f a
     -> StateT s f b
-  StateT sfn <*> StateT sfa = StateT res where
-    mapFas :: (a -> b) -> f (a, s) -> f (b, s)
-    mapFas fn fas = (\(x, s) -> (fn x, s)) <$> fas
+  StateT f <*> StateT x = StateT helper1 where
+    helper1 :: s -> f (b, s)
+    helper1 s = (f s) >>= helper2
 
-    mapAbs :: ((a -> b), s) -> f (b, s)
-    mapAbs (fn, s) = mapFas fn (sfa s)
+    helper2 :: ((a -> b), s) -> f (b, s)
+    helper2 (f', s) = helper3 f' (x s)
 
-    res :: s -> f (b, s)
-    res s = (sfn s) >>= mapAbs
+    helper3 :: (a -> b) -> f (a, s) -> f (b, s)
+    helper3 g y = helper4 <$> y where
+      helper4 :: (a, s) -> (b, s)
+      helper4 (z, s) = (g z, s)
 
 -- | Implement the `Monad` instance for @StateT s f@ given a @Monad f@.
 -- Make sure the state value is passed through in `bind`.
@@ -95,18 +101,15 @@ instance Monad f => Monad (StateT s f) where
     (a -> StateT s f b)
     -> StateT s f a
     -> StateT s f b
-  fn =<< StateT sfa = StateT res where
-    res :: s -> f (b, s)
-    res s = helper1 (sfa s)
+  f =<< StateT x = StateT helper1 where
+    helper1 :: s -> f (b, s)
+    helper1 s = helper2 (x s)
 
-    helper1 :: f (a, s) -> f (b, s)
-    helper1 fas = helper2 =<< fas
+    helper2 :: f (a, s) -> f (b, s)
+    helper2 y = helper3 =<< y
 
-    helper2 :: (a, s) -> f (b, s)
-    helper2 (x, s) = helper3 s (fn x)
-
-    helper3 :: s -> StateT s f b -> f (b, s)
-    helper3 s (StateT sfb) = sfb s
+    helper3 :: (a, s) -> f (b, s)
+    helper3 (y, s) = runStateT (f y) s
 
 -- | A `State'` is `StateT` specialised to the `ExactlyOne` functor.
 type State' s a =
@@ -120,9 +123,9 @@ state' ::
   forall a s.
   (s -> (a, s))
   -> State' s a
-state' fn = StateT helper where
+state' f = StateT helper where
   helper :: s -> ExactlyOne (a, s)
-  helper s = ExactlyOne (fn s)
+  helper s = ExactlyOne (f s)
 
 -- | Provide an unwrapper for `State'` values.
 --
@@ -143,7 +146,7 @@ execT ::
   -> f s
 execT (StateT sfa) s = helper (sfa s) where
   helper :: f (a, s) -> f s
-  helper fas = snd <$> fas
+  helper x = snd <$> x
 
 -- | Run the `State` seeded with `s` and retrieve the resulting state.
 exec' ::
@@ -161,7 +164,7 @@ evalT ::
   -> f a
 evalT (StateT sfa) s = helper (sfa s) where
   helper :: f (a, s) -> f a
-  helper fas = fst <$> fas
+  helper x = fst <$> x
 
 -- | Run the `State` seeded with `s` and retrieve the resulting value.
 eval' ::
@@ -249,12 +252,14 @@ distinctF = distinctF' lte100 where
     helper2 x = StateT (helper3 x)
 
     helper3 :: a -> S.Set a -> Optional (Bool, S.Set a)
-    helper3 x s = if not (validator x) then Empty else
-      if S.member x s
-      then Full (False, s)
-      else Full (True, S.insert x s)
+    helper3 x s = if not (validator x)
+      then Empty
+      else Full (helper4 x s)
 
-
+    helper4 :: a -> S.Set a -> (Bool, S.Set a)
+    helper4 x s = if S.member x s
+      then (False, s)
+      else (True, S.insert x s)
 
 -- | An `OptionalT` is a functor of an `Optional` value.
 data OptionalT f a =
@@ -273,7 +278,7 @@ instance Functor f => Functor (OptionalT f) where
     (a -> b) ->
     OptionalT f a ->
     OptionalT f b
-  f <$> (OptionalT foa) = OptionalT (helper <$> foa) where
+  f <$> (OptionalT x) = OptionalT (helper <$> x) where
     helper :: Optional a -> Optional b
     helper = ((<$>) f)
 
@@ -299,13 +304,13 @@ instance Applicative f => Applicative (OptionalT f) where
 -- [Full 2,Full 3,Empty]
 instance Monad f => Monad (OptionalT f) where
   (=<<) :: forall a b. (a -> OptionalT f b) -> OptionalT f a -> OptionalT f b
-  f =<< OptionalT foa = OptionalT (helper1 foa) where
+  f =<< OptionalT x = OptionalT (helper1 x) where
     helper1 :: f (Optional a) -> f (Optional b)
-    helper1 x = helper2 =<< x
+    helper1 y = helper2 =<< y
 
     helper2 :: Optional a -> f (Optional b)
     helper2 Empty = pure Empty
-    helper2 (Full x') = runOptionalT (f x')
+    helper2 (Full y) = runOptionalT (f y)
 
 -- | A `Logger` is a pair of a list of log values (`[l]`) and an arbitrary value (`a`).
 data Logger l a =
