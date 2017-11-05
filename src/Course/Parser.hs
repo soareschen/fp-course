@@ -297,9 +297,11 @@ list1 ::
   -> Parser (List a)
 list1 p = helper1 Nil where
   helper1 :: List a -> Parser (List a)
-  helper1 acc = (bindParser helper2 p) ||| (valueParser acc) where
-    helper2 :: a -> Parser (List a)
-    helper2 x = helper1 (acc ++ (x :. Nil))
+  helper1 acc = helper2 ||| (return acc) where
+    helper2 :: Parser (List a)
+    helper2 = do
+      x <- p
+      helper1 (acc ++ (x :. Nil))
 
 -- | Return a parser that produces a character but fails if
 --

@@ -79,7 +79,7 @@ toSpecialCharacter c =
               ('\\', Backslash) :.
               Nil
   in snd <$> find ((==) c . fst) table
-  
+
 -- | Parse a JSON string. Handle double-quotes, special characters, hexadecimal characters. See http://json.org for the full list of control characters in JSON.
 --
 -- /Tip:/ Use `hex`, `fromSpecialCharacter`, `between`, `is`, `charTok`, `toSpecialCharacter`.
@@ -109,8 +109,31 @@ toSpecialCharacter c =
 -- True
 jsonString ::
   Parser Chars
-jsonString =
-  error "todo: Course.JsonParser#jsonString"
+jsonString = tok helper0 where
+  helper0 :: Parser Chars
+  helper0 = between helper1 helper1 helper2
+
+  helper1 :: Parser Char
+  helper1 = is '\"'
+
+  helper2 :: Parser Chars
+  helper2 = list helper3
+
+  helper3 :: Parser Char
+  helper3 = helper4 ||| helper5
+
+  helper4 :: Parser Char
+  helper4 = noneof "\"\\"
+
+  helper5 :: Parser Char
+  helper5 = is '\\' >>> (helper6 ||| hexu)
+
+  helper6 :: Parser Char
+  helper6 = do
+    c <- character
+    case toSpecialCharacter c of
+      Empty -> unexpectedCharParser c
+      Full c2 -> return (fromSpecialCharacter c2)
 
 -- | Parse a JSON rational.
 --
@@ -136,10 +159,31 @@ jsonString =
 --
 -- >>> isErrorResult (parse jsonNumber "abc")
 -- True
-jsonNumber ::
-  Parser Rational
-jsonNumber =
-  error "todo: Course.JsonParser#jsonNumber"
+jsonNumber :: Parser Rational
+jsonNumber = tok (helper1 ||| helper2) where
+  helper1 :: Parser Rational
+  helper1 = do
+    is '-'
+    n <- helper2
+    return (n * (-1))
+
+  helper2 :: Parser Rational
+  helper2 = do
+    ints <- list1 digit
+    fractionals <- (helper3 ||| return Nil)
+    helper4 (ints ++ fractionals)
+
+  helper3 :: Parser Chars
+  helper3 = do
+    is '.'
+    digits <- list1 digit
+    return ('.' :. digits)
+
+  helper4 :: Chars -> Parser Rational
+  helper4 numStr =
+    case readFloat numStr  of
+      Empty -> constantParser (UnexpectedString numStr)
+      Full num -> return num
 
 -- | Parse a JSON true literal.
 --
@@ -152,8 +196,7 @@ jsonNumber =
 -- True
 jsonTrue ::
   Parser Chars
-jsonTrue =
-  error "todo: Course.JsonParser#jsonTrue"
+jsonTrue = stringTok "true"
 
 -- | Parse a JSON false literal.
 --
@@ -166,8 +209,7 @@ jsonTrue =
 -- True
 jsonFalse ::
   Parser Chars
-jsonFalse =
-  error "todo: Course.JsonParser#jsonFalse"
+jsonFalse = stringTok "false"
 
 -- | Parse a JSON null literal.
 --
@@ -180,8 +222,7 @@ jsonFalse =
 -- True
 jsonNull ::
   Parser Chars
-jsonNull =
-  error "todo: Course.JsonParser#jsonNull"
+jsonNull = stringTok "null"
 
 -- | Parse a JSON array.
 --
@@ -203,8 +244,7 @@ jsonNull =
 -- Result >< [JsonTrue,JsonString "abc",JsonArray [JsonFalse]]
 jsonArray ::
   Parser (List JsonValue)
-jsonArray =
-  error "todo: Course.JsonParser#jsonArray"
+jsonArray = betweenSepbyComma '[' ']' jsonValue
 
 -- | Parse a JSON object.
 --
@@ -223,8 +263,13 @@ jsonArray =
 -- Result >xyz< [("key1",JsonTrue),("key2",JsonFalse)]
 jsonObject ::
   Parser Assoc
-jsonObject =
-  error "todo: Course.JsonParser#jsonObject"
+jsonObject = betweenSepbyComma '{' '}' helper1 where
+  helper1 :: Parser (Chars, JsonValue)
+  helper1 = do
+    key <- jsonString
+    charTok ':'
+    val <- jsonValue
+    return (key, val)
 
 -- | Parse a JSON value.
 --
@@ -241,7 +286,29 @@ jsonObject =
 jsonValue ::
   Parser JsonValue
 jsonValue =
-   error "todo: Course.JsonParser#jsonValue"
+  helper2 JsonNull jsonNull |||
+  helper2 JsonTrue jsonTrue |||
+  helper2 JsonFalse jsonFalse |||
+  helper1 JsonArray jsonArray |||
+  helper1 JsonString jsonString |||
+  helper1 JsonObject jsonObject |||
+  helper1 JsonRational jsonNumber
+  where
+    helper1 ::
+      forall a
+      . (a -> JsonValue)
+      -> Parser a
+      -> Parser JsonValue
+    helper1 constructor p = do
+      x <- p
+      return (constructor x)
+
+    helper2 ::
+      forall a
+      . JsonValue
+      -> Parser a
+      -> Parser JsonValue
+    helper2 val p = p >>> return val
 
 -- | Read a file into a JSON value.
 --
